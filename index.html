@@ -772,8 +772,8 @@
 
     points.forEach(p => {
       const cb = opts.plugins && opts.plugins.tooltip && opts.plugins.tooltip.callbacks && opts.plugins.tooltip.callbacks.label;
-      const text = cb ? cb({ parsed: { y: p.value }, label: p.label }) : (p.label + ': ' + fmt(p.value));
-      p.tooltipHtml = '<b>' + p.label + '</b><br>' + text;
+      const text = cb ? cb({ parsed: { y: p.value }, label: p.label }) : (escHtml(p.label) + ': ' + fmt(p.value));
+      p.tooltipHtml = '<b>' + escHtml(p.label) + '</b><br>' + text;
     });
     this._layout = { points };
   };
@@ -826,7 +826,7 @@
         ctx.fillStyle = color; ctx.textAlign = 'right';
         ctx.fillText(truncate(ctx, lab, padL - 12), padL - 8, y + barH / 2);
         bars.push({ x: padL, y, w: Math.max(barW, 4), h: barH, label: lab, value: v,
-          tooltipHtml: '<b>' + lab + '</b><br>' + fmt(v) });
+          tooltipHtml: '<b>' + escHtml(lab) + '</b><br>' + fmt(v) });
       });
       this._layout = { bars };
     } else {
@@ -853,7 +853,7 @@
         ctx.fillStyle = color;
         ctx.fillText(truncate(ctx, lab, colW), x + barW / 2, h - padB + 12);
         bars.push({ x, y, w: barW, h: Math.max(barH, 4), label: lab, value: v,
-          tooltipHtml: '<b>' + lab + '</b><br>' + fmt(v) });
+          tooltipHtml: '<b>' + escHtml(lab) + '</b><br>' + fmt(v) });
       });
       this._layout = { bars };
     }
@@ -909,7 +909,7 @@
       ctx.fillStyle = fill;
       ctx.fill();
       segs.push({ index: i, start, end, label: lab, value: v,
-        tooltipHtml: '<b>' + lab + '</b><br>' + fmt(v) + ' (' + (100 * frac).toFixed(1) + '%)' });
+        tooltipHtml: '<b>' + escHtml(lab) + '</b><br>' + fmt(v) + ' (' + (100 * frac).toFixed(1) + '%)' });
     });
     // inner hole
     ctx.beginPath(); ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
@@ -1049,7 +1049,9 @@ function debounce(fn, wait){
 
 /* ================= Multi-select component (reusable) ================= */
 const multiSelectRegistry = {};
-function escapeHtmlAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+// ترميز كامل لأي نص قادم من البيانات قبل إدراجه في HTML (نص أو قيمة attribute)
+function escHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function escapeHtmlAttr(s){ return escHtml(s); }
 
 function mountMultiSelect(id){
   const sel = document.getElementById(id);
@@ -1117,7 +1119,7 @@ function mountMultiSelect(id){
     const MAX_CHIPS = 2;
     let html = '';
     selected.slice(0, MAX_CHIPS).forEach(o=>{
-      html += `<span class="ms-chip" data-val="${escapeHtmlAttr(o.value)}"><span>${o.textContent}</span><button type="button" title="إزالة">✕</button></span>`;
+      html += `<span class="ms-chip" data-val="${escapeHtmlAttr(o.value)}"><span>${escHtml(o.textContent)}</span><button type="button" title="إزالة">✕</button></span>`;
     });
     if(selected.length > MAX_CHIPS) html += `<span class="ms-chip-more">+${selected.length - MAX_CHIPS}</span>`;
     chipsBox.innerHTML = html;
@@ -1485,16 +1487,16 @@ function renderTable(rows){
       const badgeCls = STATUS_BADGE[r.status] || 'neutral';
       const badgeLabel = STATUS_LABEL_AR[r.status] || r.status;
       return `<tr>
-        <td class="id-cell">${r.id||'—'}</td>
-        <td>${r.sender}</td>
-        <td>${r.gov}</td>
-        <td>${r.branch}</td>
-        <td>${r.service_type}</td>
-        <td class="num">${r.pickup_date||'—'}</td>
-        <td><span class="badge ${badgeCls}">${badgeLabel}</span></td>
-        <td>${r.final_status}</td>
-        <td>${r.account_manager}</td>
-        <td class="num">${r.age??'—'}</td>
+        <td class="id-cell">${escHtml(r.id||'—')}</td>
+        <td>${escHtml(r.sender)}</td>
+        <td>${escHtml(r.gov)}</td>
+        <td>${escHtml(r.branch)}</td>
+        <td>${escHtml(r.service_type)}</td>
+        <td class="num">${escHtml(r.pickup_date||'—')}</td>
+        <td><span class="badge ${badgeCls}">${escHtml(badgeLabel)}</span></td>
+        <td>${escHtml(r.final_status)}</td>
+        <td>${escHtml(r.account_manager)}</td>
+        <td class="num">${escHtml(r.age??'—')}</td>
         <td class="amount-cell">${typeof r.ship_cost==='number'?fmtNum(r.ship_cost):'—'}</td>
         <td class="amount-cell">${typeof r.collect_amt==='number'?fmtNum(r.collect_amt):'—'}</td>
       </tr>`;
@@ -1634,12 +1636,12 @@ function renderSegTable(senderSegs){
     tbody.innerHTML = pageStats.map(s=>{
       const segCls = SEGMENT_CSS[s.segment] || 'neutral';
       return `<tr>
-        <td>${s.sender}</td>
-        <td>${s.account_manager}</td>
+        <td>${escHtml(s.sender)}</td>
+        <td>${escHtml(s.account_manager)}</td>
         <td class="num">${fmtNum(s.total)}</td>
         <td class="num">${fmtNum(s.delivered)}</td>
         <td class="num">${(s.rate*100).toFixed(1)}%</td>
-        <td><span class="badge ${segCls}">${s.segment}</span></td>
+        <td><span class="badge ${segCls}">${escHtml(s.segment)}</span></td>
       </tr>`;
     }).join('');
   }
@@ -1699,9 +1701,9 @@ function renderFeedback(){
   if(!withText.length){ list.innerHTML = '<div class="feedback-empty">لا توجد ملاحظات مسجّلة</div>'; return; }
   list.innerHTML = withText.map(f=>`
     <div class="feedback-item">
-      <div class="fb-top"><span class="fb-sender">${f.sender}</span><span class="num">${f.date}</span></div>
-      <div class="fb-text">${f.feedback}</div>
-      <div style="font-size:10.5px;color:var(--ink-faint);margin-top:4px">مدير الحساب: ${f.account_manager}</div>
+      <div class="fb-top"><span class="fb-sender">${escHtml(f.sender)}</span><span class="num">${escHtml(f.date)}</span></div>
+      <div class="fb-text">${escHtml(f.feedback)}</div>
+      <div style="font-size:10.5px;color:var(--ink-faint);margin-top:4px">مدير الحساب: ${escHtml(f.account_manager)}</div>
     </div>`).join('');
 }
 
@@ -1732,8 +1734,9 @@ const EXPORT_COLUMNS = [
 ];
 function csvEscape(v){
   if(v === null || v === undefined) return '';
-  const s = String(v);
-  return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  let s = String(v);
+  if(/^[=+\-@\t\r]/.test(s) && typeof v !== 'number') s = "'" + s; // Formula Injection (الأرقام الحقيقية لا تُمس)
+  return /[",\n\r']/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
 function exportFilteredCSV(){
   const rows = lastFilteredRows;
@@ -1993,7 +1996,7 @@ async function attemptRefresh(isAutoRefresh){
           (totalRows ? ' / ' + totalRows.toLocaleString('en-US') : ''));
       },
       (statusText)=>{
-        setDataSourceStatus('⏳ ' + statusText);
+        setDataSourceStatus('⏳ ' + escHtml(statusText));
       }
     );
     setDataset(buildRowsFromLiveRecords(json.data), { lastRefresh: new Date() });
@@ -2002,7 +2005,7 @@ async function attemptRefresh(isAutoRefresh){
     document.getElementById('refreshFailBanner').classList.remove('show');
   } catch(err){
     document.getElementById('refreshFailBanner').classList.add('show');
-    setDataSourceStatus('🔴 تعذّر الاتصال بمصدر البيانات المباشر (' + err.message + ') — ' +
+    setDataSourceStatus('🔴 تعذّر الاتصال بمصدر البيانات المباشر (' + escHtml(err.message) + ') — ' +
       (ROWS.length ? 'يتم عرض آخر نسخة بيانات محمّلة بنجاح.' : 'يتم عرض البيانات المضمّنة كنسخة احتياطية.'));
     if(!isAutoRefresh) console.error('[live refresh failed]', err);
   } finally {
@@ -2042,7 +2045,7 @@ async function boot(){
           if(loadingScreenText) loadingScreenText.textContent = msg;
         },
         (statusText)=>{
-          setDataSourceStatus('⏳ ' + statusText);
+          setDataSourceStatus('⏳ ' + escHtml(statusText));
           const loadingScreenText = document.querySelector('#loadingScreen div:last-child');
           if(loadingScreenText) loadingScreenText.textContent = statusText;
         }
