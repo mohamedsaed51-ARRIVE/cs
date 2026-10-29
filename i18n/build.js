@@ -38,10 +38,50 @@ function build(html) {
   out = out.replace(tail, () => 'boot();' + NL + 'ArriveI18n.onChange(() => { refreshAll(); renderLiveDataQuality(ROWS); renderFeedback(); renderSegmentLegend(); });' + NL + NL + '</script>');
   return out;
 }
-module.exports = { build, PATCHES };
+// ---------------------------------------------------------------------------
+// سلامة الإخراج: الناتج قد يحوي بيانات حقيقية (إن بُني من الأصل) ⇒ يُكتب حصرًا داخل i18n/dist/ (المتجاهَل في Git)،
+// ولا يُسمح بالكتابة فوق الأصل ولا فوق ملف المصدر ولا فوق أي ملف مرتبط به (رابط رمزي أو صلب)، ولا خارج dist/.
+// ---------------------------------------------------------------------------
+const ORIGINAL = path.join(ROOT, 'index.html');
+const DIST = path.join(__dirname, 'dist');
+function realOrSelf(p) { try { return fs.realpathSync(p); } catch (e) { return path.resolve(p); } }
+function sameFile(a, b) {
+  try { const x = fs.statSync(a), y = fs.statSync(b); return x.dev === y.dev && x.ino === y.ino; } catch (e) { return false; }
+}
+function assertSafeOutput(out, source) {
+  if (typeof out !== 'string' || !out) throw new Error('مسار الإخراج مطلوب');
+  const abs = path.resolve(out);
+  const reject = (why) => { throw new Error('رُفض مسار الإخراج: ' + why); };
+  if (!/\.html$/i.test(abs)) reject('الامتداد يجب أن يكون .html');
+  // 1) لا الأصل ولا المصدر (بالمسار أو بالهوية inode أو عبر الرابط الرمزي)
+  for (const protectedFile of [ORIGINAL, source].filter(Boolean)) {
+    if (abs === path.resolve(protectedFile) || realOrSelf(abs) === realOrSelf(protectedFile) || sameFile(abs, protectedFile)) reject('يطابق ملفًا محميًا (الأصل أو المصدر)');
+  }
+  // 2) داخل i18n/dist/ فقط — بعد حل الروابط الرمزية للمجلد الأب (لا هروب عبر symlink أو ..)
+  fs.mkdirSync(DIST, { recursive: true });
+  const distReal = fs.realpathSync(DIST);
+  let parent = path.dirname(abs); while (!fs.existsSync(parent) && parent !== path.dirname(parent)) parent = path.dirname(parent);
+  const parentReal = fs.realpathSync(parent), rel = path.relative(distReal, path.join(parentReal, path.relative(parent, path.dirname(abs))));
+  if (rel.startsWith('..') || path.isAbsolute(rel)) reject('خارج i18n/dist/');
+  if (fs.existsSync(abs) && fs.lstatSync(abs).isDirectory()) reject('المسار مجلد');
+  if (fs.existsSync(abs) && fs.lstatSync(abs).isSymbolicLink()) reject('المسار رابط رمزي');
+  return abs;
+}
+function buildToFile(out, html, source) {
+  const abs = assertSafeOutput(out, source);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, build(html));
+  return abs;
+}
+module.exports = { build, buildToFile, assertSafeOutput, PATCHES, DIST, ORIGINAL };
 if (require.main === module) {
-  const o = process.argv[2] || path.join(__dirname, 'dist', 'index.html');
-  fs.mkdirSync(path.dirname(o), { recursive: true });
-  fs.writeFileSync(o, build(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')));
-  console.log('built', o);
+  // الاستخدام: node i18n/build.js [--source <ملف>] [--out <ملف داخل i18n/dist/>]
+  const args = process.argv.slice(2); const get = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
+  if (args.length && !args.every((a, i) => a === '--source' || a === '--out' || args[i - 1] === '--source' || args[i - 1] === '--out')) { console.error('استخدام: node i18n/build.js [--source <ملف>] [--out <ملف داخل i18n/dist/>]'); process.exit(2); }
+  const source = get('--source') ? path.resolve(get('--source')) : ORIGINAL;
+  const out = get('--out') || path.join(DIST, 'index.html');
+  try {
+    const abs = buildToFile(out, fs.readFileSync(source, 'utf8'), source);
+    console.log('built', path.relative(ROOT, abs), '(' + fs.statSync(abs).size + ' bytes)');   // المسار والحجم فقط — لا محتوى
+  } catch (e) { console.error(String(e.message).slice(0, 200)); process.exit(1); }
 }
